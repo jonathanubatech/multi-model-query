@@ -57,7 +57,10 @@ def test_detect_available_with_mocked_binaries() -> None:
         return f"/usr/local/bin/{binary}" if binary in available_binaries else None
 
     with (
-        patch("multi_model_lib.registry._check_binary", side_effect=lambda b: mock_which(b) is not None),
+        patch(
+            "multi_model_lib.registry._check_binary",
+            side_effect=lambda b: mock_which(b) is not None,
+        ),
         patch("multi_model_lib.registry._check_bedrock_access", return_value=False),
         patch("multi_model_lib.registry._check_ollama_running", return_value=False),
     ):

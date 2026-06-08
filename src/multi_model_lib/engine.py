@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -21,8 +21,8 @@ async def fan_out(prompt: str, config: MultiModelConfig) -> QueryResult:
     Returns a QueryResult with responses from all invoked models.
     """
     start_time = time.perf_counter()
-    timestamp = datetime.now(timezone.utc).isoformat()
-    session_id = f"mmq-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}"
+    timestamp = datetime.now(UTC).isoformat()
+    session_id = f"mmq-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}"
 
     available = detect_available(config)
     all_models = list(MODEL_REGISTRY.keys())
@@ -55,8 +55,8 @@ async def fan_out(prompt: str, config: MultiModelConfig) -> QueryResult:
     model_results: list[ModelResult] = []
     models_fell_back: list[str] = []
 
-    for name, result in zip(model_names, results):
-        if isinstance(result, Exception):
+    for name, result in zip(model_names, results, strict=True):
+        if isinstance(result, BaseException):
             model_results.append(ModelResult(
                 name=name,
                 provider=available[name]["provider"],
@@ -91,7 +91,9 @@ async def _invoke_model(
     invocation_method = entry.get("invocation_method", "cli")
 
     if invocation_method == "boto3":
-        return await _invoke_bedrock(prompt, config.bedrock_model, config.bedrock_region, config.timeout)
+        return await _invoke_bedrock(
+            prompt, config.bedrock_model, config.bedrock_region, config.timeout
+        )
     elif invocation_method == "http":
         model = config.ollama_model
         return await _invoke_ollama(prompt, model, config.timeout)
@@ -99,7 +101,7 @@ async def _invoke_model(
         # CLI-based invocation
         try:
             return await _invoke_cli(name, entry, prompt, config.timeout)
-        except (FileNotFoundError, asyncio.TimeoutError) as e:
+        except (TimeoutError, FileNotFoundError) as e:
             # Try API fallback if enabled
             if config.api_key_fallback and entry.get("api_fallback"):
                 from multi_model_lib.fallback import try_api_fallback
@@ -134,7 +136,7 @@ async def _invoke_cli(
 
     try:
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         proc.kill()
         await proc.communicate()
         raise
@@ -161,7 +163,6 @@ async def _invoke_bedrock(
     prompt: str, model_id: str, region: str, timeout: int
 ) -> ModelResult:
     """Invoke AWS Bedrock via boto3."""
-    import boto3
 
     start = time.perf_counter()
 
@@ -183,7 +184,7 @@ async def _invoke_bedrock(
             elapsed_seconds=round(elapsed, 3),
             exit_code=0,
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         elapsed = time.perf_counter() - start
         return ModelResult(
             name="bedrock",
@@ -209,7 +210,7 @@ async def _invoke_bedrock(
 
 def _bedrock_sync_call(prompt: str, model_id: str, region: str) -> str:
     """Synchronous Bedrock invocation (runs in executor)."""
-    import boto3
+    import boto3  # type: ignore[import-untyped]
 
     client = boto3.client("bedrock-runtime", region_name=region)
 
@@ -242,7 +243,7 @@ def _bedrock_sync_call(prompt: str, model_id: str, region: str) -> str:
 
     # Extract text based on model provider
     if "anthropic" in model_id:
-        return response_body.get("content", [{}])[0].get("text", "")
+        return str(response_body.get("content", [{}])[0].get("text", ""))
     elif "amazon" in model_id:
         results = response_body.get("results", [{}])
         return results[0].get("outputText", "") if results else ""
@@ -325,11 +326,15 @@ def _parse_output(name: str, raw: str, parse_mode: str) -> str:
                             if isinstance(msg, dict) and "content" in msg:
                                 content = msg["content"]
                                 if isinstance(content, list):
-                                    texts = [b.get("text", "") for b in content if b.get("type") == "text"]
+                                    texts = [
+                                        b.get("text", "")
+                                        for b in content
+                                        if b.get("type") == "text"
+                                    ]
                                     if texts:
                                         return "\n".join(texts)
                         if item.get("type") == "result":
-                            return item.get("result", raw)
+                            return str(item.get("result", raw))
                 return raw
             elif isinstance(data, dict):
                 if "result" in data:
@@ -337,12 +342,12 @@ def _parse_output(name: str, raw: str, parse_mode: str) -> str:
                 if "content" in data:
                     content = data["content"]
                     if isinstance(content, list) and content:
-                        return content[0].get("text", str(content[0]))
+                        return str(content[0].get("text", str(content[0])))
                     return str(content)
             return raw
         except json.JSONDecodeError:
             # Try JSONL (newline-delimited JSON)
-            lines = [l.strip() for l in raw.strip().splitlines() if l.strip()]
+            lines = [ln.strip() for ln in raw.strip().splitlines() if ln.strip()]
             for line in reversed(lines):
                 try:
                     item = json.loads(line)
@@ -352,11 +357,15 @@ def _parse_output(name: str, raw: str, parse_mode: str) -> str:
                             if isinstance(msg, dict) and "content" in msg:
                                 content = msg["content"]
                                 if isinstance(content, list):
-                                    texts = [b.get("text", "") for b in content if b.get("type") == "text"]
+                                    texts = [
+                                        b.get("text", "")
+                                        for b in content
+                                        if b.get("type") == "text"
+                                    ]
                                     if texts:
                                         return "\n".join(texts)
                         if item.get("type") == "result":
-                            return item.get("result", "")
+                            return str(item.get("result", ""))
                 except json.JSONDecodeError:
                     continue
             return raw.strip()

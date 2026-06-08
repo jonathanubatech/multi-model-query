@@ -23,7 +23,11 @@ def log_telemetry(result: QueryResult, log_dir: Path) -> None:
                 "invocation_method": model_result.invocation_method,
                 "status": model_result.status,
                 "elapsed_seconds": model_result.elapsed_seconds,
-                "cost_usd": _estimate_cost(model_result.name, model_result.invocation_method, len(model_result.parsed_response)),
+                "cost_usd": _estimate_cost(
+                    model_result.name,
+                    model_result.invocation_method,
+                    len(model_result.parsed_response),
+                ),
                 "prompt_length": len(result.prompt),
                 "response_length": len(model_result.parsed_response),
             }
@@ -62,5 +66,7 @@ def _estimate_cost(name: str, invocation_method: str, response_length: int) -> f
     input_rate = cost_per_1m_input.get(name, 3.0)
     output_rate = cost_per_1m_output.get(name, 15.0)
 
-    cost = (input_tokens_est * input_rate / 1_000_000) + (output_tokens_est * output_rate / 1_000_000)
+    cost = (input_tokens_est * input_rate / 1_000_000) + (
+        output_tokens_est * output_rate / 1_000_000
+    )
     return round(cost, 6)
