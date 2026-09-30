@@ -106,7 +106,7 @@ async def _invoke_anthropic_api(prompt: str, api_key: str, model: str, timeout: 
         data = response.json()
         content = data.get("content", [])
         if content and isinstance(content, list):
-            return content[0].get("text", "")
+            return str(content[0].get("text", ""))
         return json.dumps(data)
 
 
@@ -129,7 +129,7 @@ async def _invoke_openai_api(prompt: str, api_key: str, model: str, timeout: int
         data = response.json()
         choices = data.get("choices", [])
         if choices:
-            return choices[0].get("message", {}).get("content", "")
+            return str(choices[0].get("message", {}).get("content", ""))
         return json.dumps(data)
 
 
@@ -151,7 +151,7 @@ async def _invoke_google_api(prompt: str, api_key: str, model: str, timeout: int
         if candidates:
             parts = candidates[0].get("content", {}).get("parts", [])
             if parts:
-                return parts[0].get("text", "")
+                return str(parts[0].get("text", ""))
         return json.dumps(data)
 
 
@@ -173,5 +173,5 @@ async def _invoke_perplexity_api(prompt: str, api_key: str, timeout: int) -> str
         data = response.json()
         choices = data.get("choices", [])
         if choices:
-            return choices[0].get("message", {}).get("content", "")
+            return str(choices[0].get("message", {}).get("content", ""))
         return json.dumps(data)

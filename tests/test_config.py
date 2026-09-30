@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from multi_model_lib.config import MultiModelConfig, REPO_ROOT
+from multi_model_lib.config import REPO_ROOT, MultiModelConfig
 
 
 def test_config_defaults() -> None:
